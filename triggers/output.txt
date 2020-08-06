@@ -1,0 +1,312 @@
+SQL> rem:Integrity through TriggerS
+
+
+SQL> set linesize 200;
+SQL> set pagesize 150;
+SQL> set serveroutput on;
+
+
+SQL> rem:--------------------------------------------------------------------------------------
+
+SQL> rem:The date of arrival should be always later than or on the same date of departure.
+SQL> 
+SQL> create or replace trigger arrival
+  2  before insert or update on fl_schedule
+  3  for each row when (new.atime<new.dtime)
+  4  BEGIN
+  5  	     RAISE_APPLICATION_ERROR(-20107,'atime is incorrect');
+  6  END;
+  7  /
+
+Trigger created.
+
+
+SQL> select * from fl_schedule;
+
+FLNO    DEPARTS        DTIME ARRIVES        ATIME      PRICE                                                                                                                                            
+------- --------- ---------- --------- ---------- ----------                                                                                                                                            
+A5-3246 22-APR-06       1810 22-APR-05       1900     202.45                                                                                                                                           
+
+1 row selected.
+
+SQL> INSERT INTO fl_schedule values('AF-12','22-apr-07',1800,'22-apr-05',1850,450.25);
+
+1 row created.
+
+
+SQL> rem:firing trigger
+
+SQL> INSERT INTO fl_schedule values('AF-12','22-apr-07',1900,'22-apr-05',1850,450.25);
+INSERT INTO fl_schedule values('AF-12','22-apr-07',1900,'22-apr-05',1850,450.25)
+         *
+ERROR at line 1:
+
+ORA-20107: atime is incorrect
+
+ORA-06512: at "SYSTEM.ARRIVAL", line 2 
+ORA-04088: error during execution of trigger 'SYSTEM.ARRIVAL'
+
+
+SQL> select * from fl_schedule;
+
+FLNO    DEPARTS        DTIME ARRIVES        ATIME      PRICE                                                                                                                                            
+------- --------- ---------- --------- ---------- ----------                                                                                                                                            
+A5-3246 22-APR-06       1810 22-APR-05       1900     202.45                                                                                                                                            
+AF-12   22-APR-07       1800 22-APR-05       1850     450.25  
+
+2 rows selected.
+
+SQL> rem:--------------------------------------------------------------------------------------
+ 
+SQL> rem:Flight number CX­7520 is scheduled only on Tuesday, Friday and Sunday.
+SQL> 
+SQL> create or replace trigger schedule
+  2  before insert or update on fl_schedule
+  3  for each row when (new.flno='CX7520')
+  4  DECLARE
+  5  	     x char;
+  6  	     y date;
+  7  BEGIN
+  8  	     y:=:new.departs;
+  9  	     select to_char(y,'DAY') into x from dual;
+ 10  	     if(x not in('TUESDAY','FRIDAY','SUNDAY') ) then
+ 11  		     RAISE_APPLICATION_ERROR(-20107,'scheduling day is incorrect');
+ 12  	     END IF;
+ 13  END;
+ 14  /
+
+Trigger created.
+
+SQL>
+
+SQL> select * from fl_schedule;
+
+FLNO    DEPARTS        DTIME ARRIVES        ATIME      PRICE                                                                                                                                            
+------- --------- ---------- --------- ---------- ----------                                                                                                                                            
+A5-3246 22-APR-06       1810 22-APR-05       1900     202.45                                                                                                                                            
+AF-12   22-APR-07       1800 22-APR-05       1850     450.25  
+
+2 rows selected.
+
+SQL> insert into fl_schedule values('CX-7520','24-apr-20',1800,'22-apr-25',1850,450.25);
+
+1 row created.
+
+SQL> rem:firing trigger
+
+SQL> insert into fl_schedule values('CX-7520','23-apr-20',1800,'22-apr-25',1850,450.25);
+insert into fl_schedule values('CX-7520','23-apr-20',1800,'22-apr-25',1850,450.25)
+         *
+ERROR at line 1:
+
+ORA-20107: scheduling day is incorrect
+
+ORA-06512: at "SYSTEM.SCHEDULE", line 8
+ORA-04088: error during execution of trigger 'SYSTEM.SCHEDULE'
+
+SQL> select * from fl_schedule;
+
+FLNO    DEPARTS        DTIME ARRIVES        ATIME      PRICE                                                                                                                                            
+------- --------- ---------- --------- ---------- ----------                                                                                                                                            
+A5-3246 22-APR-06       1810 22-APR-05       1900     202.45                                                                                                                                            
+AF-12   22-APR-07       1800 22-APR-05       1850     450.25  
+CX-7520 23-apr-20       1800 22-apr-25       1850     450.25
+
+3 rows selected.
+
+SQL> rem:--------------------------------------------------------------------------------------
+> 
+SQL> rem:An aircraft is assigned to a flight only if its cruising range is more than the distance of the  flights’ route.
+SQL> 
+SQL> create or replace trigger cru_range
+  2  before insert or update on flights
+  3  for each row
+  4  DECLARE
+  5  	     x number;
+  6  	     y number;
+  7  	     z aircraft.aid%type;
+  8  BEGIN
+  9  	     z:=:new.aid;
+ 10  	     select cruisingrange into x from aircraft ar where(ar.aid=z);
+ 11  	     select distance into y from routes r,flights f where((r.routeid=f.rid) and (f.aid=z));
+ 12  	     if(x<=y) then
+ 13  		     RAISE_APPLICATION_ERROR(-20107,'cruising_range is not sufficient');
+ 14  	     END IF;
+ 15  END;
+ 16  /
+
+Trigger created.
+
+SQL>
+SQL> select * from flights;
+
+FLIGHTN RID           AID                                                                                                                                                                               
+------- ------ ----------                                                                                                                                                                               
+9E-3749 DM251           4                                                                                                                                                                               
+MQ-4477 DN250           5                                                                                                                                                                               
+MQ-4565 DN250           5                                                                                                                                                                               
+CX-7520 LD102           4                                                                                                                                                                               
+WS-5060 LD102           5                                                                                                                                                                               
+QF-3045 LD102          15                                                                                                                                                                               
+JJ-7456 LW100          13                                                                                                                                                                               
+JJ-2482 LW100          13                                                                                                                                                                               
+SN-8814 LW100           2                                                                                                                                                                               
+WN-484  LC101          14                                                                                                                                                                               
+WN-434  LC101          13                                                                                                                                                                               
+B6-474  LB103           2                                                                                                                                                                               
+B6-482  LB103           2                                                                                                                                                                               
+VA-6551 LS104           1                                                                                                                                                                               
+VA-2    LS104           1                                                                                                                                                                               
+DJ-2    LS104           1                                                                                                                                                                               
+SQ-11   LT105          11                                                                                                                                                                               
+AI-7205 LT105          12                                                                                                                                                                               
+MH-93   LT105          11                                                                                                                                                                               
+HA-3    LH106          13                                                                                                                                                                               
+HA-1    LH106          13                                                                                                                                                                               
+UA-1428 LH106           2                                                                                                                                                                               
+A5-3376 CL150          14                                                                                                                                                                               
+A5-3246 CN151           4                                                                                                                                                                               
+9E-3851 MD200           5                                                                                                                                                                               
+9E-3622 MD200           4                                                                                                                                                                               
+G7-6205 MN204           4                                                                                                                                                                               
+EV-5134 MN204          15                                                                                                                                                                               
+RP-5018 MC201          16                                                                                                                                                                               
+G7-3664 MC201           5                                                                                                                                                                               
+FX-2351 MP202           7                                                                                                                                                                               
+AS-5958 MM203          16                                                                                                                                                                               
+AS-5062 MM203           7                                                                                                                                                                               
+DL-3402 PN350          15                                                                                                                                                                               
+CY-1846 NYL400          8                                                                                                                                                                               
+BA-178  NYL400         10                                                                                                                                                                               
+IB-4618 NYL400          9                                                                                                                                                                               
+VS-26   NYL400          8                                                                                                                                                                               
+AF-23   NYP401         10                                                                                                                                                                               
+AF-11   NYP401         10                                                                                                                                                                               
+RJ-7056 NYP401          8                                                                                                                                                                               
+AF-12   LNY107         10                                                                                                                                                                               
+
+42 rows selected.
+
+SQL> INSERT INTO flights VALUES ('CX-101','LB103',3);
+
+1 row created.
+
+
+SQL> rem:firing trigger
+
+
+SQL> select * from aircraft;
+
+       AID ANAME                          TYPE       CRUISINGRANGE                                                                                                                                      
+---------- ------------------------------ ---------- -------------                                                                                                                                      
+         1 Boeing 747-400                 Boeing              8430                                                                                                                                      
+         2 Boeing 737-800                 Boeing              3383                                                                                                                                      
+         3 Airbus A340-300                Airbus              7120                                                                                                                                      
+         4 British Aerospace Jetstream 41 BAe                 1502                                                                                                                                      
+         5 Embraer ERJ-145                Embraer             1530                                                                                                                                      
+         6 SAAB 340                       Saab                2128                                                                                                                                      
+         7 Piper PA-46 Meridian           Piper                520                                                                                                                                      
+         8 Tupolev Tu-154                 Tupolev             4103                                                                                                                                      
+        16 Schweizer 2-33                 Schweizer            300                                                                                                                                      
+         9 Lockheed L1011 Tristar         Lockheed            6900                                                                                                                                      
+        10 Boeing 757-300                 Boeing              4010                                                                                                                                      
+        11 Boeing 777-300                 Boeing              6441                                                                                                                                      
+        12 Boeing 767-400ER               Boeing              6475                                                                                                                                      
+        13 Airbus A320                    Airbus              2605                                                                                                                                      
+        14 Airbus A319                    Airbus              1805                                                                                                                                      
+        15 Boeing 727                     Boeing              1504                                                                                                                                      
+
+16 rows selected.
+
+SQL> select * from routes;
+
+ROUTEI ORIG_AIRPORT         DEST_AIRPORT           DISTANCE                                                                                                                                             
+------ -------------------- -------------------- ----------                                                                                                                                             
+LW100  Los Angeles          Washington D.C.            2308                                                                                                                                             
+LC101  Los Angeles          Chicago                    1749                                                                                                                                             
+LD102  Los Angeles          Dallas                     1251                                                                                                                                             
+LB103  Los Angeles          Boston                     2606                                                                                                                                             
+LS104  Los Angeles          Sydney                     7487                                                                                                                                             
+LT105  Los Angeles          Tokyo                      5478                                                                                                                                             
+LH106  Los Angeles          Honolulu                   2551                                                                                                                                             
+CL150  Chicago              Los Angeles                1749                                                                                                                                             
+CN151  Chicago              New York                    802                                                                                                                                             
+MD200  Madison              Detroit                     319                                                                                                                                             
+DN250  Detroit              New York                    470                                                                                                                                             
+DM251  Detroit              Montreal                    517                                                                                                                                             
+MN204  Madison              New York                    789                                                                                                                                             
+MC201  Madison              Chicago                     150                                                                                                                                             
+MP202  Madison              Pittsburgh                  510                                                                                                                                             
+MM203  Madison              Minneapolis                 247                                                                                                                                             
+MNY300 Minneapolis          New York                    991                                                                                                                                             
+PN350  Pittsburgh           New York                    303                                                                                                                                             
+PC351  Pittsburgh           Chicago                     409                                                                                                                                             
+NYL400 New York             London                     3471                                                                                                                                             
+NYP401 New York             Paris                      3631                                                                                                                                             
+LNY107 Los Angeles          New York                   2510                                                                                                                                             
+
+22 rows selected.
+
+SQL> INSERT INTO flights VALUES ('CX-101','LS104',3);
+INSERT INTO flights VALUES ('CX-101','LS104',3)
+            *
+ERROR at line 1:
+
+ORA-20107: cruising_range is not sufficient
+
+ORA-06512: at "SYSTEM.CRU_RANGE", line 12
+ORA-04088: error during execution of trigger 'SYSTEM.CRU_RANGE'
+
+SQL> select * from flights;
+
+FLIGHTN RID           AID                                                                                                                                                                               
+------- ------ ----------                                                                                                                                                                               
+9E-3749 DM251           4                                                                                                                                                                               
+MQ-4477 DN250           5                                                                                                                                                                               
+MQ-4565 DN250           5                                                                                                                                                                               
+CX-7520 LD102           4                                                                                                                                                                               
+WS-5060 LD102           5                                                                                                                                                                               
+QF-3045 LD102          15                                                                                                                                                                               
+JJ-7456 LW100          13                                                                                                                                                                               
+JJ-2482 LW100          13                                                                                                                                                                               
+SN-8814 LW100           2                                                                                                                                                                               
+WN-484  LC101          14                                                                                                                                                                               
+WN-434  LC101          13                                                                                                                                                                               
+B6-474  LB103           2                                                                                                                                                                               
+B6-482  LB103           2                                                                                                                                                                               
+VA-6551 LS104           1                                                                                                                                                                               
+VA-2    LS104           1                                                                                                                                                                               
+DJ-2    LS104           1                                                                                                                                                                               
+SQ-11   LT105          11                                                                                                                                                                               
+AI-7205 LT105          12                                                                                                                                                                               
+MH-93   LT105          11                                                                                                                                                                               
+HA-3    LH106          13                                                                                                                                                                               
+HA-1    LH106          13                                                                                                                                                                               
+UA-1428 LH106           2                                                                                                                                                                               
+A5-3376 CL150          14                                                                                                                                                                               
+A5-3246 CN151           4                                                                                                                                                                               
+9E-3851 MD200           5                                                                                                                                                                               
+9E-3622 MD200           4                                                                                                                                                                               
+G7-6205 MN204           4                                                                                                                                                                               
+EV-5134 MN204          15                                                                                                                                                                               
+RP-5018 MC201          16                                                                                                                                                                               
+G7-3664 MC201           5                                                                                                                                                                               
+FX-2351 MP202           7                                                                                                                                                                               
+AS-5958 MM203          16                                                                                                                                                                               
+AS-5062 MM203           7                                                                                                                                                                               
+DL-3402 PN350          15                                                                                                                                                                               
+CY-1846 NYL400          8                                                                                                                                                                               
+BA-178  NYL400         10                                                                                                                                                                               
+IB-4618 NYL400          9                                                                                                                                                                               
+VS-26   NYL400          8                                                                                                                                                                               
+AF-23   NYP401         10                                                                                                                                                                               
+AF-11   NYP401         10                                                                                                                                                                               
+RJ-7056 NYP401          8                                                                                                                                                                               
+AF-12   LNY107         10                                                                                                                                                                               
+CX-101  LB103           3
+
+43 rows selected.
+
+SQL> rem:--------------------------------------------------------------------------------------
+>
+SQL> spool off;
