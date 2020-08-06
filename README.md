@@ -1,2 +1,8 @@
-# my_git
-simple programs
+# DBMS (using SQL)
+
+simple queries
+complex queries
+views
+trigger
+functions
+procedure
